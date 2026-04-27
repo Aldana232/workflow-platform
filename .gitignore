@@ -5,6 +5,9 @@ target/
 .env
 *.env
 application-prod.properties
+
+### Temp files ###
+*.tmp.*
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
