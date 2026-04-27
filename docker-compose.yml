@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: workflow-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: workflow_platform
+
+  spring-boot:
+    build: .
+    container_name: workflow-backend
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mongodb
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/workflow_platform
+      JWT_SECRET: ${JWT_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+
+volumes:
+  mongodb_data:
