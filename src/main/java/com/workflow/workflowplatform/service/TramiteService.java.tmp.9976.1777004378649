@@ -1,0 +1,410 @@
+package com.workflow.workflowplatform.service;
+
+import com.workflow.workflowplatform.dto.TaskDetailDTO;
+import com.workflow.workflowplatform.dto.TramiteResponseDTO;
+import com.workflow.workflowplatform.model.ClienteInfo;
+import com.workflow.workflowplatform.model.FormSchema;
+import com.workflow.workflowplatform.model.HistoryEntry;
+import com.workflow.workflowplatform.model.Node;
+import com.workflow.workflowplatform.model.Process;
+import com.workflow.workflowplatform.model.TaskSubmission;
+import com.workflow.workflowplatform.model.Tramite;
+import com.workflow.workflowplatform.model.User;
+import com.workflow.workflowplatform.model.enums.NodeType;
+import com.workflow.workflowplatform.model.enums.TramiteStatus;
+import com.workflow.workflowplatform.repository.ProcessRepository;
+import com.workflow.workflowplatform.repository.TaskSubmissionRepository;
+import com.workflow.workflowplatform.repository.TramiteRepository;
+import com.workflow.workflowplatform.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@Service
+@RequiredArgsConstructor
+public class TramiteService {
+
+    private final TramiteRepository tramiteRepository;
+    private final ProcessRepository processRepository;
+    private final TaskSubmissionRepository taskSubmissionRepository;
+    private final WorkflowEngineService workflowEngineService;
+    private final UserRepository userRepository;
+    private final FormSchemaService formSchemaService;
+
+    public Tramite createTramite(String processId, ClienteInfo clienteInfo, Authentication authentication) {
+        String funcionarioEmail = authentication.getName();
+        User funcionario = userRepository.findByEmail(funcionarioEmail)
+                .orElseThrow(() -> new RuntimeException("Funcionario no encontrado: " + funcionarioEmail));
+
+        Process process = processRepository.findById(processId)
+                .orElseThrow(() -> new RuntimeException("Proceso no encontrado: " + processId));
+
+        String code = generateCode();
+
+        Node startNode = findStartNode(process);
+        if (startNode == null) {
+            throw new RuntimeException("Nodo START no encontrado en el proceso: " + processId);
+        }
+
+        Node nextNode = findNextNode(process, startNode.getId());
+        String initialNodeId = (nextNode != null) ? nextNode.getId() : startNode.getId();
+
+        Tramite tramite = Tramite.builder()
+                .code(code)
+                .processId(processId)
+                .clienteInfo(clienteInfo)
+                .userId(funcionario.getId())
+                .createdBy(funcionario.getId())
+                .currentNodeId(initialNodeId)
+                .status(TramiteStatus.ACTIVE)
+                .history(new ArrayList<>())
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        int active = process.getActiveTramites() == null ? 0 : process.getActiveTramites();
+        process.setActiveTramites(active + 1);
+        processRepository.save(process);
+
+        Tramite savedTramite = tramiteRepository.save(tramite);
+
+        if (nextNode != null) {
+            workflowEngineService.assignTask(savedTramite, process, nextNode.getId());
+            addHistoryEntry(savedTramite, "Trámite creado en nodo: " + nextNode.getLabel());
+        } else {
+            addHistoryEntry(savedTramite, "Trámite creado en nodo: " + startNode.getLabel());
+        }
+
+        return tramiteRepository.findById(savedTramite.getId()).orElse(savedTramite);
+    }
+
+    public void deleteTramite(String tramiteId) {
+        Tramite t = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new RuntimeException("Trámite no encontrado: " + tramiteId));
+
+        taskSubmissionRepository.deleteAll(taskSubmissionRepository.findByTramiteId(tramiteId));
+
+        if (TramiteStatus.ACTIVE.equals(t.getStatus())) {
+            processRepository.findById(t.getProcessId()).ifPresent(proc -> {
+                int current = proc.getActiveTramites() == null ? 0 : proc.getActiveTramites();
+                proc.setActiveTramites(Math.max(0, current - 1));
+                processRepository.save(proc);
+            });
+        }
+
+        tramiteRepository.deleteById(tramiteId);
+    }
+
+    public void submitTask(String tramiteId, String nodeId, Map<String, Object> formData, String observations) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new RuntimeException("Trámite no encontrado: " + tramiteId));
+
+        String resolvedNodeId = (nodeId == null || nodeId.isEmpty())
+                ? tramite.getCurrentNodeId()
+                : nodeId;
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Buscar TaskSubmission activa; si no existe, crearla en el momento
+        TaskSubmission task = taskSubmissionRepository
+                .findByTramiteIdAndNodeIdAndCompletedAtIsNull(tramiteId, resolvedNodeId)
+                .orElseGet(() -> {
+                    TaskSubmission newTask = TaskSubmission.builder()
+                            .tramiteId(tramiteId)
+                            .nodeId(resolvedNodeId)
+                            .processId(tramite.getProcessId())
+                            .userId(tramite.getCreatedBy())
+                            .startedAt(now)
+                            .createdAt(now)
+                            .updatedAt(now)
+                            .build();
+                    return taskSubmissionRepository.save(newTask);
+                });
+
+        task.setCompletedAt(now);
+        task.setSubmittedAt(now);
+        if (task.getStartedAt() != null) {
+            task.setDurationMinutes((int) ChronoUnit.MINUTES.between(task.getStartedAt(), now));
+        }
+        task.setFormData(formData);
+        if (observations != null && !observations.isEmpty()) {
+            task.setComments(observations);
+        }
+        task.setUpdatedAt(now);
+        taskSubmissionRepository.save(task);
+
+        String historyMsg = "Tarea completada en nodo: " + resolvedNodeId
+                + " | Duración: " + (task.getDurationMinutes() != null ? task.getDurationMinutes() : 0) + " min";
+        if (observations != null && !observations.isEmpty()) {
+            historyMsg += " | Obs: " + observations;
+        }
+        addHistoryEntry(tramite, historyMsg);
+
+        workflowEngineService.advance(tramiteId, formData);
+    }
+
+    /**
+     * Devuelve true si el departamento del usuario autenticado es el primer
+     * nodo USER_TASK de al menos un proceso ACTIVO — es decir, puede iniciar trámites.
+     */
+    public boolean canUserInitiate(Authentication authentication) {
+        User user = userRepository.findByEmail(authentication.getName()).orElse(null);
+        if (user == null || user.getDepartmentId() == null || user.getDepartmentId().isEmpty()) {
+            return false;
+        }
+
+        List<Process> activeProcesses = processRepository.findAll().stream()
+                .filter(p -> com.workflow.workflowplatform.model.enums.ProcessStatus.ACTIVE.equals(p.getStatus()))
+                .collect(java.util.stream.Collectors.toList());
+
+        for (Process p : activeProcesses) {
+            if (p.getNodes() == null || p.getEdges() == null) continue;
+
+            Node start = p.getNodes().stream()
+                    .filter(n -> NodeType.START.equals(n.getType()))
+                    .findFirst().orElse(null);
+            if (start == null) continue;
+
+            String firstNodeId = p.getEdges().stream()
+                    .filter(e -> start.getId().equals(e.getSource()))
+                    .map(e -> e.getTarget())
+                    .findFirst().orElse(null);
+            if (firstNodeId == null) continue;
+
+            Node firstNode = p.getNodes().stream()
+                    .filter(n -> firstNodeId.equals(n.getId()))
+                    .findFirst().orElse(null);
+
+            if (firstNode != null && user.getDepartmentId().equals(firstNode.getDepartmentId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Tramite getTramiteByCode(String code) {
+        return tramiteRepository.findByCode(code)
+                .orElseThrow(() -> new RuntimeException("Trámite no encontrado con código: " + code));
+    }
+
+    public List<TaskSubmission> getTramitesByDepartment(String departmentId) {
+        return taskSubmissionRepository.findPendingByDepartmentOrUnassigned(departmentId);
+    }
+
+    public List<TaskSubmission> getCompletedTasksByDepartment(String departmentId) {
+        return taskSubmissionRepository.findByDepartmentIdAndCompletedAtIsNotNull(departmentId);
+    }
+
+    public List<TaskSubmission> getAllPendingTasks() {
+        return taskSubmissionRepository.findByCompletedAtIsNull();
+    }
+
+    public List<TaskDetailDTO> getEnrichedTasks(List<TaskSubmission> tasks) {
+        List<TaskDetailDTO> result = new ArrayList<>();
+        for (TaskSubmission task : tasks) {
+            // canProcess solo si la submission aún NO fue completada
+            boolean canProcess = task.getCompletedAt() == null;
+            TaskDetailDTO.TaskDetailDTOBuilder dto =
+                    TaskDetailDTO.builder()
+                    .id(task.getId())
+                    .tramiteId(task.getTramiteId())
+                    .processId(task.getProcessId())
+                    .nodeId(task.getNodeId())
+                    .departmentId(task.getDepartmentId())
+                    .arrivedAt(task.getStartedAt())
+                    .canProcess(canProcess);
+
+            // Enrich with Tramite data
+            if (task.getTramiteId() != null) {
+                tramiteRepository.findById(task.getTramiteId()).ifPresent(t -> {
+                    dto.tramiteCode(t.getCode());
+                    dto.status(t.getStatus() != null ? t.getStatus().name() : "ACTIVE");
+                    dto.clienteInfo(t.getClienteInfo());
+                });
+            }
+
+            // Enrich with Process data
+            if (task.getProcessId() != null) {
+                processRepository.findById(task.getProcessId()).ifPresent(p -> {
+                    dto.processName(p.getName());
+                    if (p.getNodes() != null && task.getNodeId() != null) {
+                        p.getNodes().stream()
+                            .filter(n -> task.getNodeId().equals(n.getId()))
+                            .findFirst()
+                            .ifPresent(n -> {
+                                dto.nodeName(n.getLabel());
+                                dto.slaHours(n.getSlaHours());
+                            });
+                    }
+                });
+            }
+
+            result.add(dto.build());
+        }
+        return result;
+    }
+
+    public String getDepartmentIdFromAuth(Authentication authentication) {
+        if (authentication == null) return null;
+        return userRepository.findByEmail(authentication.getName())
+                .map(u -> u.getDepartmentId())
+                .orElse(null);
+    }
+
+    /**
+     * Retorna todos los trámites ACTIVOS creados por el usuario autenticado,
+     * convertidos a TaskDetailDTO para que el dashboard los muestre.
+     * Se usa como fallback cuando no hay TaskSubmissions asignadas.
+     */
+    /**
+     * Retorna trámites ACTIVOS creados por el usuario que aún tienen una
+     * TaskSubmission sin completar en su nodo actual.
+     * Así Carlos deja de ver un trámite una vez que avanzó al siguiente nodo.
+     */
+    public List<TaskDetailDTO> getActiveTramitesAsTasksForUser(Authentication authentication) {
+        User user = userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        // Incluir ACTIVE y COMPLETED para que el funcionario vea su historial
+        List<Tramite> tramites = new ArrayList<>();
+        tramites.addAll(tramiteRepository.findByCreatedByAndStatus(user.getId(), TramiteStatus.ACTIVE));
+        tramites.addAll(tramiteRepository.findByCreatedByAndStatus(user.getId(), TramiteStatus.COMPLETED));
+
+        // Solo mostrar tramites donde hay una TaskSubmission activa (sin completar) en el nodo actual
+        java.util.Set<String> pendingTramiteIds = taskSubmissionRepository.findByCompletedAtIsNull()
+                .stream()
+                .map(TaskSubmission::getTramiteId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<TaskDetailDTO> result = new ArrayList<>();
+        for (Tramite t : tramites) {
+            // canProcess = true solo si el trámite ACTIVE tiene TaskSubmission pendiente
+            boolean canProcess = TramiteStatus.ACTIVE.equals(t.getStatus())
+                    && pendingTramiteIds.contains(t.getId());
+
+            TaskDetailDTO.TaskDetailDTOBuilder dto =
+                    TaskDetailDTO.builder()
+                    .id(t.getId())
+                    .tramiteId(t.getId())
+                    .tramiteCode(t.getCode())
+                    .processId(t.getProcessId())
+                    .nodeId(t.getCurrentNodeId())
+                    .departmentId(user.getDepartmentId())
+                    .arrivedAt(t.getCreatedAt())
+                    .status(t.getStatus() != null ? t.getStatus().name() : "ACTIVE")
+                    .clienteInfo(t.getClienteInfo())
+                    .canProcess(canProcess);
+
+            processRepository.findById(t.getProcessId()).ifPresent(p -> {
+                dto.processName(p.getName());
+                if (p.getNodes() != null && t.getCurrentNodeId() != null) {
+                    p.getNodes().stream()
+                        .filter(n -> t.getCurrentNodeId().equals(n.getId()))
+                        .findFirst()
+                        .ifPresent(n -> {
+                            dto.nodeName(n.getLabel());
+                            dto.slaHours(n.getSlaHours());
+                        });
+                }
+            });
+
+            result.add(dto.build());
+        }
+        return result;
+    }
+
+    public Tramite getTramiteById(String tramiteId) {
+        return tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new RuntimeException("Trámite no encontrado: " + tramiteId));
+    }
+
+    public List<HistoryEntry> getTramiteHistory(String tramiteId) {
+        return getTramiteById(tramiteId).getHistory();
+    }
+
+    public FormSchema getCurrentForm(String tramiteId) {
+        Tramite tramite = getTramiteById(tramiteId);
+        return formSchemaService.getSchemaByNode(tramite.getProcessId(), tramite.getCurrentNodeId());
+    }
+
+    public List<TramiteResponseDTO> getActiveTramitesByProcess(String processId) {
+        List<Tramite> tramites = tramiteRepository.findByProcessIdAndStatus(processId, TramiteStatus.ACTIVE);
+        return tramites.stream()
+                .map(t -> TramiteResponseDTO.builder()
+                        .tramiteId(t.getId())
+                        .code(t.getCode())
+                        .currentNodeId(t.getCurrentNodeId())
+                        .clienteNombre(t.getClienteInfo() != null ? t.getClienteInfo().getNombre() : null)
+                        .startedAt(t.getCreatedAt())
+                        .build())
+                .toList();
+    }
+
+    /** Todos los trámites de un proceso (ACTIVE + COMPLETED) — para el admin */
+    public List<TramiteResponseDTO> getAllTramitesByProcess(String processId) {
+        List<Tramite> tramites = tramiteRepository.findByProcessId(processId);
+        return tramites.stream()
+                .map(t -> TramiteResponseDTO.builder()
+                        .tramiteId(t.getId())
+                        .code(t.getCode())
+                        .currentNodeId(t.getCurrentNodeId())
+                        .clienteNombre(t.getClienteInfo() != null ? t.getClienteInfo().getNombre() : null)
+                        .startedAt(t.getCreatedAt())
+                        .status(t.getStatus() != null ? t.getStatus().name() : "ACTIVE")
+                        .build())
+                .toList();
+    }
+
+    /** Devuelve los datos del formulario enviado en un nodo específico — para vista read-only */
+    public TaskSubmission getSubmissionForNode(String tramiteId, String nodeId) {
+        return taskSubmissionRepository
+                .findFirstByTramiteIdAndNodeIdOrderByCompletedAtDesc(tramiteId, nodeId)
+                .orElseThrow(() -> new RuntimeException("Submission no encontrada"));
+    }
+
+    private String generateCode() {
+        int year = LocalDateTime.now().getYear();
+        long seq = System.currentTimeMillis() % 10000;
+        return String.format("TRAM-%d-%04d", year, seq);
+    }
+
+    private Node findStartNode(Process process) {
+        if (process.getNodes() == null) return null;
+        return process.getNodes().stream()
+                .filter(n -> NodeType.START.equals(n.getType()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Node findNextNode(Process process, String currentNodeId) {
+        if (process.getEdges() == null || process.getEdges().isEmpty()) return null;
+        String nextId = process.getEdges().stream()
+                .filter(e -> e.getSource().equals(currentNodeId))
+                .map(e -> e.getTarget())
+                .findFirst()
+                .orElse(null);
+        if (nextId == null) return null;
+        return process.getNodes().stream()
+                .filter(n -> n.getId().equals(nextId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void addHistoryEntry(Tramite tramite, String action) {
+        if (tramite.getHistory() == null) {
+            tramite.setHistory(new ArrayList<>());
+        }
+        tramite.getHistory().add(HistoryEntry.builder()
+                .action(action)
+                .timestamp(LocalDateTime.now())
+                .build());
+        tramite.setUpdatedAt(LocalDateTime.now());
+        tramiteRepository.save(tramite);
+    }
+}
