@@ -21,7 +21,8 @@ public class CorsConfig {
         config.setAllowedOriginPatterns(List.of(
             "http://localhost:4200",
             "https://main.d3rs2veleasrg5.amplifyapp.com",
-            "https://workflow-demo.site"
+            "https://workflow-demo.site",
+            "https://www.workflow-demo.site"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
@@ -30,7 +31,8 @@ public class CorsConfig {
             "Authorization",
             "Content-Type",
             "Accept",
-            "Origin"
+            "Origin",
+            "X-Requested-With"
         ));
 
         // Exponer Authorization para que Angular pueda leer el token en respuestas
