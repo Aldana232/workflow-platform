@@ -20,7 +20,8 @@ public class CorsConfig {
         // junto con allowCredentials, ya que el estándar CORS lo prohíbe.
         config.setAllowedOriginPatterns(List.of(
             "http://localhost:4200",
-            "https://tudominio.com"
+            "https://main.d3rs2veleasrg5.amplifyapp.com",
+            "https://api.workflow-demo.site"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
