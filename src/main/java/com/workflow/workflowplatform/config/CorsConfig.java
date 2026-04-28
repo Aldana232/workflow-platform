@@ -22,17 +22,20 @@ public class CorsConfig {
             "http://localhost:4200",
             "https://main.d3rs2veleasrg5.amplifyapp.com",
             "https://workflow-demo.site",
-            "https://www.workflow-demo.site"
+            "https://www.workflow-demo.site",
+            "https://api.workflow-demo.site"
         ));
 
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
 
         config.setAllowedHeaders(List.of(
             "Authorization",
             "Content-Type",
+            "X-Requested-With",
             "Accept",
             "Origin",
-            "X-Requested-With"
+            "Access-Control-Request-Method",
+            "Access-Control-Request-Headers"
         ));
 
         // Exponer Authorization para que Angular pueda leer el token en respuestas
