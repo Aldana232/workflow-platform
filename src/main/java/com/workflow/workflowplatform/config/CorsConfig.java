@@ -21,17 +21,15 @@ public class CorsConfig {
         config.setAllowedOriginPatterns(List.of(
             "http://localhost:4200",
             "https://main.d3rs2veleasrg5.amplifyapp.com",
-            "https://api.workflow-demo.site"
+            "https://workflow-demo.site"
         ));
 
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 
-        // Headers explícitos: evita el conflicto de "*" con allowCredentials
         config.setAllowedHeaders(List.of(
             "Authorization",
             "Content-Type",
             "Accept",
-            "X-Requested-With",
             "Origin"
         ));
 
