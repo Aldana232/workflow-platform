@@ -30,8 +30,12 @@ public class JwtFilter extends OncePerRequestFilter {
     // Las peticiones OPTIONS (CORS preflight) no llevan token — se omiten
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return "OPTIONS".equalsIgnoreCase(request.getMethod());
-    }
+     String path = request.getServletPath();
+
+    return "OPTIONS".equalsIgnoreCase(request.getMethod())
+        || path.startsWith("/api/notifications/")
+        || path.startsWith("/api/auth/");
+}
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
