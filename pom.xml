@@ -84,6 +84,13 @@
 			<version>0.36.2</version>
 		</dependency>
 
+		<!-- Firebase Admin SDK -->
+		<dependency>
+			<groupId>com.google.firebase</groupId>
+			<artifactId>firebase-admin</artifactId>
+			<version>9.2.0</version>
+		</dependency>
+
 		<!-- JWT Authentication -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>

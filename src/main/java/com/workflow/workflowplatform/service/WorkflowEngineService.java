@@ -11,6 +11,8 @@ import com.workflow.workflowplatform.repository.ProcessRepository;
 import com.workflow.workflowplatform.repository.TaskSubmissionRepository;
 import com.workflow.workflowplatform.repository.TramiteRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -18,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WorkflowEngineService {
@@ -26,6 +29,9 @@ public class WorkflowEngineService {
     private final ProcessRepository processRepository;
     private final TaskSubmissionRepository taskSubmissionRepository;
     private final NotificationService notificationService;
+
+    @Autowired
+    private PushNotificationService pushNotificationService;
 
     // ─── Punto de entrada ────────────────────────────────────────────────────
 
@@ -93,6 +99,19 @@ public class WorkflowEngineService {
         tramite.setCurrentNodeId(targetId);
         tramite.setUpdatedAt(LocalDateTime.now());
         tramiteRepository.save(tramite);
+
+        Node siguienteNodo = findNodeById(process, targetId);
+        try {
+            pushNotificationService.sendToTramite(
+                    tramite.getCode(),
+                    "Tu trámite avanzó ✓",
+                    "Tu solicitud " + tramite.getCode() +
+                    " pasó a: " + (siguienteNodo != null ? siguienteNodo.getLabel() : targetId)
+            );
+        } catch (Exception e) {
+            log.error("Error enviando push notification: " + e.getMessage());
+            // No fallar el flujo si el push falla
+        }
 
         // Despachar al nodo destino (puede ser otro gateway, END, o tarea humana)
         handleNextNode(tramite, process, targetId, formData);
@@ -249,6 +268,17 @@ public class WorkflowEngineService {
         tramite.setCompletedDate(LocalDateTime.now());
         tramite.setUpdatedAt(LocalDateTime.now());
         tramiteRepository.save(tramite);
+
+        try {
+            pushNotificationService.sendToTramite(
+                    tramite.getCode(),
+                    "¡Trámite completado! 🎉",
+                    "Tu solicitud " + tramite.getCode() +
+                    " fue aprobada y completada exitosamente."
+            );
+        } catch (Exception e) {
+            log.error("Error enviando push de completado: " + e.getMessage());
+        }
 
         process.setActiveTramites(Math.max(0, process.getActiveTramites() - 1));
         processRepository.save(process);

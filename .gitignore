@@ -5,6 +5,7 @@ target/
 .env
 *.env
 application-prod.properties
+src/main/resources/firebase-service-account.json
 
 ### Temp files ###
 *.tmp.*
