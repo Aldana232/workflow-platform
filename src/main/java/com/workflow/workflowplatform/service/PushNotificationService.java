@@ -1,5 +1,6 @@
 package com.workflow.workflowplatform.service;
 
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
@@ -7,7 +8,6 @@ import com.google.firebase.messaging.Notification;
 import com.workflow.workflowplatform.model.FcmToken;
 import com.workflow.workflowplatform.repository.FcmTokenRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -16,8 +16,14 @@ import java.util.List;
 @Service
 public class PushNotificationService {
 
-    @Autowired
-    private FcmTokenRepository fcmTokenRepository;
+    private final FcmTokenRepository fcmTokenRepository;
+    private final FirebaseApp firebaseApp;
+
+    public PushNotificationService(FcmTokenRepository fcmTokenRepository,
+                                   FirebaseApp firebaseApp) {
+        this.fcmTokenRepository = fcmTokenRepository;
+        this.firebaseApp = firebaseApp;
+    }
 
     public void sendToTramite(String tramiteCode, String title, String body) {
         List<FcmToken> tokens = fcmTokenRepository.findByTramiteCode(tramiteCode);
