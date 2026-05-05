@@ -107,7 +107,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/form-schemas", "/api/form-schemas/**").hasAnyRole("SUPERADMIN", "ADMIN", "FUNCIONARIO")
                 .requestMatchers("/api/files/**").permitAll()
                 .requestMatchers("/api/tramites/code/**").permitAll()
-                .requestMatchers("/api/notifications/**").permitAll()
+                .requestMatchers("/api/notifications/register-token").permitAll()
                 .requestMatchers(HttpMethod.DELETE, "/api/notifications/token/**").permitAll()
                 .requestMatchers(HttpMethod.DELETE, "/api/tramites/**").hasAnyRole("SUPERADMIN", "ADMIN")
                 .requestMatchers("/api/tramites", "/api/tramites/**").hasAnyRole("SUPERADMIN", "ADMIN", "FUNCIONARIO")

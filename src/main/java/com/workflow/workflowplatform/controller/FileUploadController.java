@@ -13,7 +13,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/files")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = {"https://workflow-demo.site", "http://localhost:4200"})
 public class FileUploadController {
 
     private static final String UPLOAD_DIR = "/var/www/uploads/";
