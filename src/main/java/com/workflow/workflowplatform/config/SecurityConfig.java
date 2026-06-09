@@ -56,6 +56,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(Arrays.asList(
             "http://localhost:4200",
             "https://main.d3rs2veleasrg5.amplifyapp.com",
+            "https://main.d9knpb1kiab7w.amplifyapp.com",
             "https://workflow-demo.site",
             "https://www.workflow-demo.site",
             "https://api.workflow-demo.site"
