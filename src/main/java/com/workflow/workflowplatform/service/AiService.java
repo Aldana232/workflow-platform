@@ -89,4 +89,40 @@ public class AiService {
             return error;
         }
     }
+
+    public Map<String, Object> getReportByDate(String fromDate, String toDate) {
+        try {
+            String url = aiServiceUrl + "/api/analytics/by-date?from_date=" + fromDate + "&to_date=" + toDate;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+            return response != null ? response : new HashMap<>();
+        } catch (Exception e) {
+            log.warn("AI service unavailable for getReportByDate({}, {}): {}", fromDate, toDate, e.getMessage());
+            return Map.of("error", "AI service unavailable");
+        }
+    }
+
+    public Map<String, Object> getReportByClient(String name) {
+        try {
+            String url = aiServiceUrl + "/api/analytics/by-client?name=" + name;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+            return response != null ? response : new HashMap<>();
+        } catch (Exception e) {
+            log.warn("AI service unavailable for getReportByClient({}): {}", name, e.getMessage());
+            return Map.of("error", "AI service unavailable");
+        }
+    }
+
+    public Map<String, Object> getSummaryByProcess() {
+        try {
+            String url = aiServiceUrl + "/api/analytics/summary-by-process";
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+            return response != null ? response : new HashMap<>();
+        } catch (Exception e) {
+            log.warn("AI service unavailable for getSummaryByProcess(): {}", e.getMessage());
+            return Map.of("error", "AI service unavailable");
+        }
+    }
 }

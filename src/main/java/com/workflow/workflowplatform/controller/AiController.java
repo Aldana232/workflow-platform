@@ -46,4 +46,24 @@ public class AiController {
     public ResponseEntity<Map<String, Object>> getNextAction(@PathVariable String tramiteId) {
         return ResponseEntity.ok(aiService.getNextAction(tramiteId));
     }
+
+    @GetMapping("/report/by-date")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
+    public ResponseEntity<Map<String, Object>> getReportByDate(
+            @RequestParam String fromDate,
+            @RequestParam String toDate) {
+        return ResponseEntity.ok(aiService.getReportByDate(fromDate, toDate));
+    }
+
+    @GetMapping("/report/by-client")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
+    public ResponseEntity<Map<String, Object>> getReportByClient(@RequestParam String name) {
+        return ResponseEntity.ok(aiService.getReportByClient(name));
+    }
+
+    @GetMapping("/report/by-process")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
+    public ResponseEntity<Map<String, Object>> getSummaryByProcess() {
+        return ResponseEntity.ok(aiService.getSummaryByProcess());
+    }
 }
