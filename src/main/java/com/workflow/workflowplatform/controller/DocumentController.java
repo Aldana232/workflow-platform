@@ -4,9 +4,12 @@ import com.workflow.workflowplatform.dto.DocumentEventRequest;
 import com.workflow.workflowplatform.dto.DocumentUploadRequest;
 import com.workflow.workflowplatform.model.Document;
 import com.workflow.workflowplatform.service.DocumentService;
+import com.workflow.workflowplatform.service.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -14,7 +17,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +28,7 @@ import java.util.Map;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final S3Service s3Service;
 
     @PostMapping("/upload")
     @PreAuthorize("hasAnyRole('ADMIN', 'FUNCIONARIO')")
@@ -102,23 +105,25 @@ public class DocumentController {
         }
     }
 
-    /**
-     * Registra el evento DOWNLOAD y redirige al cliente directamente a la URL de S3.
-     * El archivo vive en S3 — no en el servidor local.
-     */
     @GetMapping("/{documentId}/download")
     @PreAuthorize("hasAnyRole('ADMIN', 'FUNCIONARIO')")
-    public ResponseEntity<Void> downloadDocument(@PathVariable String documentId) {
+    public ResponseEntity<byte[]> downloadDocument(@PathVariable String documentId,
+                                                   Authentication authentication) {
         try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            String userId = auth.getName();
+            String userId = authentication != null ? authentication.getName() : "anonymous";
             Document document = documentService.downloadDocument(documentId, userId, userId);
-            return ResponseEntity.status(HttpStatus.FOUND)
-                    .location(URI.create(document.getFileUrl()))
-                    .build();
+            byte[] fileBytes = s3Service.downloadFile(document.getStoredFileName());
+
+            HttpHeaders headers = new HttpHeaders();
+            String mimeType = document.getMimeType() != null ? document.getMimeType() : "application/octet-stream";
+            headers.setContentType(MediaType.parseMediaType(mimeType));
+            headers.setContentDispositionFormData("inline", document.getFileName());
+            headers.setContentLength(fileBytes.length);
+
+            return ResponseEntity.ok().headers(headers).body(fileBytes);
         } catch (Exception e) {
             log.error("Error al descargar documento {}: {}", documentId, e.getMessage(), e);
-            return ResponseEntity.status(500).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
