@@ -12,6 +12,7 @@ import com.workflow.workflowplatform.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -41,7 +42,8 @@ public class DocumentService {
     private String serverPort;
 
     public Document uploadDocument(MultipartFile file, DocumentUploadRequest request,
-                                   String userId, String userName) throws IOException {
+                                   String userId, String userName,
+                                   Authentication authentication) throws IOException {
         String originalName = file.getOriginalFilename() != null
                 ? file.getOriginalFilename()
                 : "archivo";
@@ -50,9 +52,13 @@ public class DocumentService {
                 : "";
         String storedFileName = UUID.randomUUID() + ext;
 
-        String fileUrl = resolveFileUrl(file, storedFileName);
+        String userRole = authentication.getAuthorities().stream()
+                .findFirst()
+                .map(a -> a.getAuthority().replace("ROLE_", ""))
+                .orElse("FUNCIONARIO");
 
-        // Resolve uploader full name and department from user record
+        String fileUrl = resolveFileUrl(file, storedFileName, userRole);
+
         User uploader = userRepository.findByEmail(userId).orElse(null);
         String fullName = (uploader != null && uploader.getFirstName() != null)
                 ? (uploader.getFirstName() + " " + uploader.getLastName()).trim()
@@ -100,10 +106,10 @@ public class DocumentService {
         return documentRepository.save(document);
     }
 
-    /** Intenta subir a S3; si falla guarda localmente y retorna URL local. */
-    private String resolveFileUrl(MultipartFile file, String storedFileName) throws IOException {
+    /** Intenta subir a S3 en la carpeta del rol; si falla guarda localmente. */
+    private String resolveFileUrl(MultipartFile file, String storedFileName, String userRole) throws IOException {
         try {
-            String url = s3Service.uploadFile(file, storedFileName);
+            String url = s3Service.uploadFile(storedFileName, file.getInputStream(), file.getContentType(), userRole);
             log.info("Archivo almacenado en S3: {}", url);
             return url;
         } catch (Exception e) {

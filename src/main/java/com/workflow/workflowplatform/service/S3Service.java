@@ -4,19 +4,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 
 @Service
@@ -30,24 +28,29 @@ public class S3Service {
     @Value("${aws.s3.bucket:workflow-saguapac-docs}")
     private String bucket;
 
-    public String uploadFile(MultipartFile file, String fileName) throws IOException {
+    public String uploadFile(String storedFileName, InputStream inputStream, String contentType, String userRole) throws IOException {
+        String folder = switch (userRole != null ? userRole.toUpperCase() : "") {
+            case "FUNCIONARIO" -> "funcionarios/";
+            case "ADMIN", "SUPERADMIN" -> "administradores/";
+            default -> "documentos/";
+        };
+        String key = folder + storedFileName;
         try {
             PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(bucket)
-                    .key(fileName)
-                    .contentType(file.getContentType())
-                    .contentLength(file.getSize())
+                    .key(key)
+                    .contentType(contentType)
                     .build();
 
-            s3Client.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+            s3Client.putObject(request, RequestBody.fromInputStream(inputStream, inputStream.available()));
 
-            String fileUrl = "https://" + bucket + ".s3.amazonaws.com/" + fileName;
-            log.info("Archivo subido a S3: {}", fileUrl);
+            String fileUrl = "https://" + bucket + ".s3.amazonaws.com/" + key;
+            log.info("Archivo subido a S3 [{}]: {}", folder, fileUrl);
             return fileUrl;
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Error al subir archivo a S3 [bucket={}, key={}]: {}", bucket, fileName, e.getMessage(), e);
+            log.error("Error al subir archivo a S3 [bucket={}, key={}]: {}", bucket, key, e.getMessage(), e);
             throw new IOException("Error S3: " + e.getMessage(), e);
         }
     }
@@ -70,15 +73,24 @@ public class S3Service {
     }
 
     public byte[] downloadFile(String storedFileName) {
+        String key = storedFileName.contains("/") ? storedFileName : "documentos/" + storedFileName;
         try {
             GetObjectRequest getObjectRequest = GetObjectRequest.builder()
                     .bucket(bucket)
-                    .key(storedFileName)
+                    .key(key)
                     .build();
-            ResponseBytes<GetObjectResponse> objectBytes = s3Client.getObjectAsBytes(getObjectRequest);
-            return objectBytes.asByteArray();
+            return s3Client.getObjectAsBytes(getObjectRequest).asByteArray();
         } catch (Exception e) {
-            throw new RuntimeException("Error descargando archivo de S3: " + e.getMessage());
+            for (String folder : new String[]{"funcionarios/", "administradores/", "documentos/"}) {
+                try {
+                    GetObjectRequest req = GetObjectRequest.builder()
+                            .bucket(bucket)
+                            .key(folder + storedFileName)
+                            .build();
+                    return s3Client.getObjectAsBytes(req).asByteArray();
+                } catch (Exception ignored) {}
+            }
+            throw new RuntimeException("Archivo no encontrado en S3: " + storedFileName);
         }
     }
 

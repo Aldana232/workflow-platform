@@ -54,7 +54,7 @@ public class DocumentController {
             request.setCategory(category);
             request.setDescription(description);
 
-            Document saved = documentService.uploadDocument(file, request, userId, userId);
+            Document saved = documentService.uploadDocument(file, request, userId, userId, auth);
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
             log.error("Error al subir documento: {}", e.getMessage(), e);
