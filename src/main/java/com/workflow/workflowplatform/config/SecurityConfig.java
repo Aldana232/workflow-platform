@@ -101,7 +101,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/companies", "/api/companies/**").hasAnyRole("SUPERADMIN", "ADMIN")
-                .requestMatchers("/api/departments", "/api/departments/**").hasAnyRole("SUPERADMIN", "ADMIN")
+                .requestMatchers("/api/departments", "/api/departments/**").hasAnyRole("SUPERADMIN", "ADMIN", "FUNCIONARIO")
                 .requestMatchers(HttpMethod.GET, "/api/processes", "/api/processes/**").hasAnyRole("SUPERADMIN", "ADMIN", "FUNCIONARIO")
                 .requestMatchers("/api/processes", "/api/processes/**").hasAnyRole("SUPERADMIN", "ADMIN")
                 .requestMatchers("/api/users", "/api/users/**").hasAnyRole("SUPERADMIN", "ADMIN")

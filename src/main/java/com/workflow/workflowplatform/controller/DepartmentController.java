@@ -16,13 +16,13 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/departments")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPERADMIN', 'ADMIN')")
 public class DepartmentController {
 
     private final DepartmentRepository departmentRepository;
     private final UserRepository userRepository;
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('SUPERADMIN', 'ADMIN', 'FUNCIONARIO')")
     public ResponseEntity<List<Department>> getAll(Authentication authentication) {
         User admin = userRepository.findByEmail(authentication.getName()).orElse(null);
         List<Department> depts = (admin != null && admin.getCompanyId() != null)
@@ -32,6 +32,7 @@ public class DepartmentController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPERADMIN', 'ADMIN', 'FUNCIONARIO')")
     public ResponseEntity<Department> getById(@PathVariable String id) {
         return departmentRepository.findById(id)
                 .map(ResponseEntity::ok)
@@ -39,6 +40,7 @@ public class DepartmentController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('SUPERADMIN', 'ADMIN')")
     public ResponseEntity<Department> create(@RequestBody Department department,
                                              Authentication authentication) {
         User admin = userRepository.findByEmail(authentication.getName()).orElse(null);
@@ -52,6 +54,7 @@ public class DepartmentController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPERADMIN', 'ADMIN')")
     public ResponseEntity<Department> update(@PathVariable String id,
                                              @RequestBody Department update) {
         return departmentRepository.findById(id).map(dept -> {
@@ -65,6 +68,7 @@ public class DepartmentController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('SUPERADMIN', 'ADMIN')")
     public ResponseEntity<Void> deactivate(@PathVariable String id) {
         return departmentRepository.findById(id).map(dept -> {
             dept.setActive(false);
