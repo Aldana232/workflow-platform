@@ -44,7 +44,7 @@ public class OnlyOfficeController {
                         .url(resolveOnlyOfficeUrl(document))
                         .build())
                 .editorConfig(OnlyOfficeConfigDTO.EditorConfig.builder()
-                        .callbackUrl("http://localhost:8080/api/onlyoffice/callback/" + documentId)
+                        .callbackUrl("https://api.workflow-demo.site/api/onlyoffice/callback/" + documentId)
                         .lang("es")
                         .mode("edit")
                         .user(OnlyOfficeConfigDTO.User.builder()
