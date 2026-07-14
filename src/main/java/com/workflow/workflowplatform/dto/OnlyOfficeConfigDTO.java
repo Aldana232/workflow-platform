@@ -9,6 +9,7 @@ public class OnlyOfficeConfigDTO {
     private String documentType;
     private Document document;
     private EditorConfig editorConfig;
+    private String token;
 
     @Data
     @Builder
