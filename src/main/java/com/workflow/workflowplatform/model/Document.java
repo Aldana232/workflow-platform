@@ -32,7 +32,9 @@ public class Document {
     private String fileName;
     private String storedFileName;
     private String fileUrl;
+    private String googleDocId;
     private Long fileSize;
+    private String googleDocUrl;
     private String mimeType;
     private String category;
     private String description;

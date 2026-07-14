@@ -34,6 +34,7 @@ public class DocumentService {
     private final S3Service s3Service;
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
+    private final GoogleDocsService googleDocsService;
 
     @Value("${app.upload.dir:uploads}")
     private String uploadDir;
@@ -103,6 +104,16 @@ public class DocumentService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
+        if (document.getFileName().toLowerCase().endsWith(".docx")) {
+            try {
+                String googleDocId = googleDocsService.createGoogleDoc(document.getFileName());
+                String googleDocUrl = googleDocsService.getGoogleDocUrl(googleDocId);
+                document.setGoogleDocId(googleDocId);
+                document.setGoogleDocUrl(googleDocUrl);
+            } catch (Exception e) {
+                log.warn("No se pudo crear Google Doc para {}: {}", document.getFileName(), e.getMessage());
+            }
+        }
         return documentRepository.save(document);
     }
 
