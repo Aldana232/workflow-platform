@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @org.springframework.data.mongodb.core.mapping.Document(collection = "documents")
@@ -35,7 +36,8 @@ public class Document {
     private String mimeType;
     private String category;
     private String description;
-    private List<DocumentEvent> events;
+    @Builder.Default
+    private List<DocumentEvent> events = new ArrayList<>();
     private List<String> tags;
 
     @Builder.Default

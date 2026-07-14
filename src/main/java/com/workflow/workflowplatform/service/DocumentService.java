@@ -139,6 +139,9 @@ public class DocumentService {
                     .description("Documento visualizado")
                     .timestamp(LocalDateTime.now())
                     .build();
+            if (doc.getEvents() == null) {
+                doc.setEvents(new ArrayList<>());
+            }
             doc.getEvents().add(viewEvent);
             doc.setUpdatedAt(LocalDateTime.now());
             documentRepository.save(doc);
