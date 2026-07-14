@@ -114,6 +114,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/tramites", "/api/tramites/**").hasAnyRole("SUPERADMIN", "ADMIN", "FUNCIONARIO")
                 .requestMatchers("/api/share/validate", "/api/share/validate/**").permitAll()
                 .requestMatchers("/api/documents", "/api/documents/**").hasAnyRole("SUPERADMIN", "ADMIN", "FUNCIONARIO")
+                .requestMatchers("/api/onlyoffice/callback/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/ai/recommend-policy").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/collab/**").permitAll()
