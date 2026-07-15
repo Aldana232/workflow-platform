@@ -27,14 +27,20 @@ public class JwtFilter extends OncePerRequestFilter {
     @Autowired
     private UserDetailsService userDetailsService;
 
-    // Las peticiones OPTIONS (CORS preflight) no llevan token — se omiten
+    // Las peticiones OPTIONS (CORS preflight) no llevan token — se omiten.
+    // Las rutas de OnlyOffice (callback y descarga /raw) también se omiten:
+    // el Document Server manda su propio Bearer token (firmado con
+    // onlyoffice.jwt.secret, no el nuestro), y este filtro lo rechazaría
+    // con 401 antes de que la regla permitAll de SecurityConfig aplique.
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
      String path = request.getServletPath();
 
     return "OPTIONS".equalsIgnoreCase(request.getMethod())
         || path.startsWith("/api/notifications/")
-        || path.startsWith("/api/auth/");
+        || path.startsWith("/api/auth/")
+        || path.startsWith("/api/documents/callback/")
+        || (path.startsWith("/api/documents/") && path.endsWith("/raw"));
 }
 
     @Override
