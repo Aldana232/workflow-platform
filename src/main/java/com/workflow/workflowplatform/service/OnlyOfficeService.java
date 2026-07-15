@@ -102,9 +102,11 @@ public class OnlyOfficeService {
             String downloadUrl = (String) callbackData.get("url");
             if (downloadUrl != null) {
                 try {
-                    // FIX: OnlyOffice genera URLs con su host interno de Docker
-                    // El backend corre fuera del contenedor, así que reescribimos al puerto expuesto
-                    String fixedUrl = downloadUrl.replaceFirst("^https?://[^/]*", "http://localhost:8081");
+                    // OnlyOffice genera la URL de descarga con su propio host interno
+                    // (ej. localhost, IP del contenedor); la reescribimos a la URL
+                    // pública real configurada (onlyoffice.url) para que el backend
+                    // pueda alcanzarla sin importar si corre en la misma máquina o no
+                    String fixedUrl = downloadUrl.replaceFirst("^https?://[^/]*", onlyOfficeUrl);
                     URL url = new URL(fixedUrl);
 
                     // Descargar el documento editado desde OnlyOffice
