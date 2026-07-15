@@ -4,6 +4,7 @@ import com.workflow.workflowplatform.dto.DocumentEventRequest;
 import com.workflow.workflowplatform.dto.DocumentUploadRequest;
 import com.workflow.workflowplatform.model.Document;
 import com.workflow.workflowplatform.service.DocumentService;
+import com.workflow.workflowplatform.service.OnlyOfficeService;
 import com.workflow.workflowplatform.service.S3Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +31,7 @@ public class DocumentController {
 
     private final DocumentService documentService;
     private final S3Service s3Service;
+    private final OnlyOfficeService onlyOfficeService;
 
     @PostMapping("/upload")
     @PreAuthorize("hasAnyRole('ADMIN', 'FUNCIONARIO')")
@@ -149,6 +152,112 @@ public class DocumentController {
             return ResponseEntity.ok(stats);
         } catch (Exception e) {
             log.error("Error al obtener estadísticas de documentos para company {}: {}", companyId, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ─── OnlyOffice Colaborativo ───────────────────────────────────────────────
+
+    /**
+     * Admin habilita modo colaborativo en un documento y asigna permisos
+     */
+    @PutMapping("/{documentId}/collab/enable")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN')")
+    public ResponseEntity<?> enableCollaborativeMode(
+            @PathVariable String documentId,
+            @RequestBody Map<String, Object> body,
+            Authentication authentication) {
+        try {
+            Document document = documentService.getDocumentById(documentId);
+            document.setCollaborativeMode(true);
+
+            @SuppressWarnings("unchecked")
+            List<String> editorIds = (List<String>) body.getOrDefault("editorIds", new ArrayList<>());
+            @SuppressWarnings("unchecked")
+            List<String> viewerIds = (List<String>) body.getOrDefault("viewerIds", new ArrayList<>());
+
+            document.setEditorIds(editorIds);
+            document.setViewerIds(viewerIds);
+            documentService.saveDocument(document);
+
+            return ResponseEntity.ok(Map.of("message", "Modo colaborativo habilitado", "documentId", documentId));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Obtiene la configuración del editor OnlyOffice para un documento
+     */
+    @GetMapping("/{documentId}/collab/config")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN','FUNCIONARIO')")
+    public ResponseEntity<?> getEditorConfig(
+            @PathVariable String documentId,
+            Authentication authentication) {
+        try {
+            String userId = authentication.getName();
+            Document document = documentService.getDocumentById(documentId);
+
+            if (!document.isCollaborativeMode()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Este documento no tiene modo colaborativo habilitado"));
+            }
+
+            boolean canEdit = document.getEditorIds().contains(userId) ||
+                    authentication.getAuthorities().stream()
+                            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_SUPERADMIN"));
+
+            boolean canAccess = canEdit || document.getViewerIds().contains(userId);
+            if (!canAccess) {
+                return ResponseEntity.status(403).body(Map.of("error", "No tienes permiso para acceder a este documento"));
+            }
+
+            // Obtener nombre del usuario
+            String userName = userId;
+            Map<String, Object> config = onlyOfficeService.generateEditorConfig(document, userId, userName, canEdit);
+            return ResponseEntity.ok(config);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Callback de OnlyOffice — guarda el documento editado en S3
+     * Este endpoint debe ser público (sin autenticación) porque lo llama OnlyOffice
+     */
+    @PostMapping("/callback/{documentId}")
+    public ResponseEntity<?> onlyOfficeCallback(
+            @PathVariable String documentId,
+            @RequestBody Map<String, Object> callbackData) {
+        try {
+            onlyOfficeService.processCallback(documentId, callbackData);
+        } catch (Exception e) {
+            log.error("Error en callback OnlyOffice para doc {}: {}", documentId, e.getMessage());
+        }
+        // OnlyOffice requiere SIEMPRE {"error": 0} — cualquier otro valor causa reintentos
+        return ResponseEntity.ok(Map.of("error", 0));
+    }
+
+    /**
+     * Lista documentos colaborativos de un trámite accesibles para el usuario actual
+     */
+    @GetMapping("/tramite/{tramiteId}/collab")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPERADMIN','FUNCIONARIO')")
+    public ResponseEntity<?> getCollaborativeDocuments(
+            @PathVariable String tramiteId,
+            Authentication authentication) {
+        try {
+            String userId = authentication.getName();
+            List<Document> allDocs = documentService.getDocumentsByTramite(tramiteId, userId, userId);
+            List<Document> collabDocs = allDocs.stream()
+                    .filter(Document::isCollaborativeMode)
+                    .filter(doc -> doc.getEditorIds().contains(userId) ||
+                            doc.getViewerIds().contains(userId) ||
+                            authentication.getAuthorities().stream()
+                                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") ||
+                                            a.getAuthority().equals("ROLE_SUPERADMIN")))
+                    .toList();
+            return ResponseEntity.ok(collabDocs);
+        } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }

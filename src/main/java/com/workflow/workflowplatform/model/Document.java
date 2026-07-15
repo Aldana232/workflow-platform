@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @org.springframework.data.mongodb.core.mapping.Document(collection = "documents")
@@ -46,4 +47,14 @@ public class Document {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    // Campos colaborativos OnlyOffice
+    @Builder.Default
+    private boolean collaborativeMode = false;
+    private String onlyOfficeKey;
+    private String versionKey;
+    @Builder.Default
+    private List<String> editorIds = new ArrayList<>();  // userIds con permiso de edición
+    @Builder.Default
+    private List<String> viewerIds = new ArrayList<>();  // userIds con permiso de solo lectura
 }

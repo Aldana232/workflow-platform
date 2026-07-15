@@ -57,7 +57,15 @@ public class DocumentService {
                 .map(a -> a.getAuthority().replace("ROLE_", ""))
                 .orElse("FUNCIONARIO");
 
-        String fileUrl = resolveFileUrl(file, storedFileName, userRole);
+        // Determinar carpeta según rol
+        String folder = switch (userRole.toUpperCase()) {
+            case "FUNCIONARIO" -> "funcionarios/";
+            case "ADMIN", "SUPERADMIN" -> "administradores/";
+            default -> "documentos/";
+        };
+        String fullStoredFileName = folder + storedFileName;
+
+        String fileUrl = resolveFileUrl(file, storedFileName, fullStoredFileName, userRole);
 
         User uploader = userRepository.findByEmail(userId).orElse(null);
         String fullName = (uploader != null && uploader.getFirstName() != null)
@@ -89,7 +97,7 @@ public class DocumentService {
                 .departmentId(deptId)
                 .departmentName(deptName)
                 .fileName(originalName)
-                .storedFileName(storedFileName)
+                .storedFileName(fullStoredFileName)
                 .fileUrl(fileUrl)
                 .fileSize(file.getSize())
                 .mimeType(file.getContentType())
@@ -107,23 +115,23 @@ public class DocumentService {
     }
 
     /** Intenta subir a S3 en la carpeta del rol; si falla guarda localmente. */
-    private String resolveFileUrl(MultipartFile file, String storedFileName, String userRole) throws IOException {
+    private String resolveFileUrl(MultipartFile file, String storedFileName, String fullStoredFileName, String userRole) throws IOException {
         try {
             String url = s3Service.uploadFile(storedFileName, file.getInputStream(), file.getContentType(), userRole);
             log.info("Archivo almacenado en S3: {}", url);
             return url;
         } catch (Exception e) {
             log.warn("S3 no disponible ({}), guardando localmente.", e.getMessage());
-            return saveLocally(file, storedFileName);
+            return saveLocally(file, fullStoredFileName);
         }
     }
 
-    private String saveLocally(MultipartFile file, String storedFileName) throws IOException {
+    private String saveLocally(MultipartFile file, String fullStoredFileName) throws IOException {
         Path dir = Paths.get(uploadDir).toAbsolutePath().normalize();
-        Files.createDirectories(dir);
-        Path dest = dir.resolve(storedFileName);
+        Path dest = dir.resolve(fullStoredFileName);
+        Files.createDirectories(dest.getParent());
         Files.copy(file.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
-        String url = "http://localhost:" + serverPort + "/api/files/" + storedFileName;
+        String url = "http://localhost:" + serverPort + "/api/files/" + fullStoredFileName;
         log.info("Archivo almacenado localmente: {}", url);
         return url;
     }
@@ -225,5 +233,15 @@ public class DocumentService {
         stats.put("documentsByCategory", byCategory);
         stats.put("recentUploads", recentUploads);
         return stats;
+    }
+
+    public Document getDocumentById(String id) {
+        return documentRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Documento no encontrado: " + id));
+    }
+
+    public Document saveDocument(Document document) {
+        document.setUpdatedAt(LocalDateTime.now());
+        return documentRepository.save(document);
     }
 }
