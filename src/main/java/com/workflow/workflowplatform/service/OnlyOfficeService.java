@@ -8,6 +8,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -18,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class OnlyOfficeService {
 
@@ -107,6 +109,7 @@ public class OnlyOfficeService {
                     // pública real configurada (onlyoffice.url) para que el backend
                     // pueda alcanzarla sin importar si corre en la misma máquina o no
                     String fixedUrl = downloadUrl.replaceFirst("^https?://[^/]*", onlyOfficeUrl);
+                    log.info("OnlyOffice callback: downloadUrl original='{}', fixedUrl='{}', onlyOfficeUrl='{}'", downloadUrl, fixedUrl, onlyOfficeUrl);
                     URL url = new URL(fixedUrl);
 
                     // Descargar el documento editado desde OnlyOffice
@@ -129,6 +132,7 @@ public class OnlyOfficeService {
                     }
 
                 } catch (Exception e) {
+                    log.error("Error procesando callback OnlyOffice (detalle completo)", e);
                     throw new RuntimeException("Error procesando callback OnlyOffice: " + e.getMessage());
                 }
             }
