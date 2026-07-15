@@ -30,6 +30,9 @@ public class OnlyOfficeService {
     @Value("${onlyoffice.jwt.secret}")
     private String jwtSecret;
 
+    @Value("${app.public.url}")
+    private String publicUrl;
+
     private final DocumentRepository documentRepository;
     private final S3Service s3Service;
     private final ObjectMapper objectMapper;
@@ -55,9 +58,10 @@ public class OnlyOfficeService {
         documentConfig.put("fileType", getFileExtension(document.getFileName()));
         documentConfig.put("key", key);
         documentConfig.put("title", document.getFileName());
-        // Generar URL presignada temporal (60 minutos) para que OnlyOffice pueda descargar
-        String presignedUrl = s3Service.generatePresignedUrl(document.getStoredFileName(), 60);
-        documentConfig.put("url", presignedUrl);
+        // URL directa a nuestro backend (sin firma) — evita la incompatibilidad
+        // del cliente HTTP de Node del Document Server con URLs presignadas de S3
+        String rawUrl = publicUrl + "/api/documents/" + document.getId() + "/raw";
+        documentConfig.put("url", rawUrl);
 
         Map<String, Object> permissionsConfig = new HashMap<>();
         permissionsConfig.put("edit", canEdit);

@@ -130,6 +130,29 @@ public class DocumentController {
         }
     }
 
+    /**
+     * Sirve el archivo en crudo para que OnlyOffice lo descargue.
+     * Sin firma en la URL — evita la incompatibilidad del cliente HTTP de Node
+     * con las URLs presignadas de S3. Debe ser público (sin auth) porque
+     * el Document Server la llama directo, sin token de usuario.
+     */
+    @GetMapping("/{documentId}/raw")
+    public ResponseEntity<byte[]> getRawDocument(@PathVariable String documentId) {
+        try {
+            Document document = documentService.getDocumentById(documentId);
+            byte[] fileBytes = s3Service.downloadFile(document.getStoredFileName());
+
+            String mimeType = document.getMimeType() != null ? document.getMimeType() : "application/octet-stream";
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(mimeType))
+                    .contentLength(fileBytes.length)
+                    .body(fileBytes);
+        } catch (Exception e) {
+            log.error("Error al servir documento crudo {}: {}", documentId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @DeleteMapping("/{documentId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> deleteDocument(@PathVariable String documentId) {
