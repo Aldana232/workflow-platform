@@ -9,6 +9,8 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest;
+import software.amazon.awssdk.services.s3.model.ObjectVersion;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -17,6 +19,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequ
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.Comparator;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -147,6 +151,29 @@ public class S3Service {
             }
             throw new RuntimeException("Archivo no encontrado en S3: " + storedFileName);
         }
+    }
+
+    /** Lista todas las versiones guardadas de una key (requiere bucket con versionamiento habilitado), más reciente primero. */
+    public List<ObjectVersion> listVersions(String key) {
+        ListObjectVersionsRequest request = ListObjectVersionsRequest.builder()
+                .bucket(bucket)
+                .prefix(key)
+                .build();
+
+        return s3Client.listObjectVersions(request).versions().stream()
+                .filter(v -> v.key().equals(key))
+                .sorted(Comparator.comparing(ObjectVersion::lastModified).reversed())
+                .toList();
+    }
+
+    /** Descarga una versión específica de un archivo por su versionId de S3. */
+    public byte[] downloadVersion(String key, String versionId) {
+        GetObjectRequest request = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .versionId(versionId)
+                .build();
+        return s3Client.getObjectAsBytes(request).asByteArray();
     }
 
     public void deleteFile(String fileName) {

@@ -2,6 +2,7 @@ package com.workflow.workflowplatform.service;
 
 import com.workflow.workflowplatform.dto.DocumentEventRequest;
 import com.workflow.workflowplatform.dto.DocumentUploadRequest;
+import com.workflow.workflowplatform.dto.DocumentVersionDTO;
 import com.workflow.workflowplatform.model.Department;
 import com.workflow.workflowplatform.model.Document;
 import com.workflow.workflowplatform.model.DocumentEvent;
@@ -22,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -243,5 +245,24 @@ public class DocumentService {
     public Document saveDocument(Document document) {
         document.setUpdatedAt(LocalDateTime.now());
         return documentRepository.save(document);
+    }
+
+    /** Lista el historial de versiones almacenadas en S3 para un documento (requiere versionamiento habilitado en el bucket). */
+    public List<DocumentVersionDTO> getDocumentVersions(String documentId) {
+        Document document = getDocumentById(documentId);
+        return s3Service.listVersions(document.getStoredFileName()).stream()
+                .map(v -> DocumentVersionDTO.builder()
+                        .versionId(v.versionId())
+                        .lastModified(LocalDateTime.ofInstant(v.lastModified(), ZoneOffset.UTC))
+                        .sizeBytes(v.size() != null ? v.size() : 0)
+                        .isLatest(v.isLatest() != null && v.isLatest())
+                        .build())
+                .toList();
+    }
+
+    /** Descarga el contenido de una versión específica de un documento. */
+    public byte[] downloadDocumentVersion(String documentId, String versionId) {
+        Document document = getDocumentById(documentId);
+        return s3Service.downloadVersion(document.getStoredFileName(), versionId);
     }
 }

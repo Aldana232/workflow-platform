@@ -153,6 +153,38 @@ public class DocumentController {
         }
     }
 
+    @GetMapping("/{documentId}/versions")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FUNCIONARIO')")
+    public ResponseEntity<?> getDocumentVersions(@PathVariable String documentId) {
+        try {
+            return ResponseEntity.ok(documentService.getDocumentVersions(documentId));
+        } catch (Exception e) {
+            log.error("Error al obtener historial de versiones {}: {}", documentId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{documentId}/versions/{versionId}/download")
+    @PreAuthorize("hasAnyRole('ADMIN', 'FUNCIONARIO')")
+    public ResponseEntity<byte[]> downloadDocumentVersion(@PathVariable String documentId,
+                                                           @PathVariable String versionId) {
+        try {
+            Document document = documentService.getDocumentById(documentId);
+            byte[] fileBytes = documentService.downloadDocumentVersion(documentId, versionId);
+
+            HttpHeaders headers = new HttpHeaders();
+            String mimeType = document.getMimeType() != null ? document.getMimeType() : "application/octet-stream";
+            headers.setContentType(MediaType.parseMediaType(mimeType));
+            headers.setContentDispositionFormData("attachment", document.getFileName());
+            headers.setContentLength(fileBytes.length);
+
+            return ResponseEntity.ok().headers(headers).body(fileBytes);
+        } catch (Exception e) {
+            log.error("Error al descargar versión {} del documento {}: {}", versionId, documentId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @DeleteMapping("/{documentId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> deleteDocument(@PathVariable String documentId) {
