@@ -6,5 +6,6 @@ public enum FormFieldType {
     SELECT,
     CHECKBOX,
     CHECKLIST,
+    TABLE,
     FILE
 }
